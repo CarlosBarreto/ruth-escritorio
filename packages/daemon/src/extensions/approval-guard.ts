@@ -44,6 +44,16 @@ export const POLICY_ENV = "GENTLE_DOT_CONNECTOR_POLICY";
 export const DRAFT_STATUS_KEY = "gentle-dot:connector-draft";
 /** A draft longer than this is not sent. */
 const MAX_DRAFT = 20_000;
+// 20261104 - itera - block memory tools in subagents -- Begin
+/**
+ * Long-term memory is Ruth's. Subagents never load `ruth-context.ts`, so the guard blocks these tools
+ * for them. This is a copy on purpose: an import that failed to load would leave the subagent with no
+ * guard at all. A test keeps both copies identical.
+ */
+export const MEMORY_TOOL_BLOCKED = "La memoria de largo plazo se consulta por Ruth.";
+/** Engram's tools, bare, as `mcp__<server>__mem_*`, or as `<server>.mem_*`. */
+export const MEMORY_TOOL = /(?:^|__|\.)mem_/;
+// 20261104 - itera - block memory tools in subagents -- End
 
 /** `propose_connector`: a plain JSON schema (the engine accepts one), with secrets by name only. */
 export const PROPOSE_TOOL = {
@@ -466,6 +476,11 @@ export default function approvalGuard(pi: ExtensionAPI, options: { subagent?: bo
 	pi.on("context", (event) => ({ messages: pruneScreenshots(event.messages) }));
 
 	pi.on("tool_call", async (event, ctx) => {
+		// 20261104 - itera - block memory tools in subagents -- Begin
+		// First: a builtin, proxied, or read-only connector rule below would otherwise let the call pass.
+		if (options.subagent && MEMORY_TOOL.test(event.toolName))
+			return { block: true, reason: MEMORY_TOOL_BLOCKED };
+		// 20261104 - itera - block memory tools in subagents -- End
 		const annotations = event.toolName.startsWith("mcp__")
 			? pi.getAllTools().find((tool) => tool.name === event.toolName)?.annotations
 			: undefined;

@@ -22,7 +22,11 @@ import {
 	ConnectorManager,
 	type ConnectorOAuthOptions,
 	ConnectorStore,
+	// 20261104 - itera - load ruth-context extension -- Begin
+	engineExtensionArgs,
 	policyEnv,
+	ruthProtectedPaths,
+	// 20261104 - itera - load ruth-context extension -- End
 } from "./connectors.ts";
 import { directAccess, type EngineAccess, engineAccess } from "./engine-access.ts";
 import { approvalRequest } from "./extensions/approval-guard.ts";
@@ -211,6 +215,9 @@ export async function startDaemon(options: DaemonOptions): Promise<DotDaemon> {
 		agentHome,
 		workspace: options.workspace,
 		guardPath: APPROVAL_GUARD,
+		// 20261104 - itera - protect ruth-context files -- Begin
+		extraProtectedPaths: ruthProtectedPaths(agentEnv),
+		// 20261104 - itera - protect ruth-context files -- End
 		// The assistant's own engine: its subagents load the guard from its extensions folder (S25.4).
 		...(options.agentHome ? { childGuard: true } : {}),
 		...(vps ? { engineAccess: access } : {}),
@@ -248,7 +255,9 @@ export async function startDaemon(options: DaemonOptions): Promise<DotDaemon> {
 	});
 	connectorStore.onUpdated = () => proxy.sync();
 	// The assistant's own engine loads the approval guard for connector actions.
-	const guardArgs = options.agentHome ? ["-e", APPROVAL_GUARD] : [];
+	// 20261104 - itera - load ruth-context extension -- Begin
+	const guardArgs = engineExtensionArgs(options.agentHome);
+	// 20261104 - itera - load ruth-context extension -- End
 	const supervisor = new AgentSupervisor({
 		command: options.agentCommand,
 		args: [...(options.agentArgs ?? []), ...homeArgs],

@@ -628,6 +628,10 @@ export interface ConnectorStoreOptions {
 	workspace?: string;
 	/** The approval guard's own file, protected like the connector files. */
 	guardPath?: string;
+	// 20261104 - itera - add extra protected paths option -- Begin
+	/** More files protected like the guard; see {@link ruthProtectedPaths}. */
+	extraProtectedPaths?: string[];
+	// 20261104 - itera - add extra protected paths option -- End
 	/**
 	 * Keeps the file that loads the guard (`guardPath`) into the engine's subagents in the engine's
 	 * extensions folder, written and put back like `mcp.json` and protected like the guard (S25.4).
@@ -1152,6 +1156,9 @@ export class ConnectorStore {
 				this.file,
 				join(this.options.dataDir, "token"),
 				...(this.options.guardPath ? [this.options.guardPath] : []),
+				// 20261104 - itera - protect ruth-context files -- Begin
+				...(this.options.extraProtectedPaths ?? []),
+				// 20261104 - itera - protect ruth-context files -- End
 				...(this.childGuard ? [this.childGuard.file] : []),
 			],
 			...(this.computer ? { builtin: [COMPUTER_ID] } : {}),
@@ -1727,6 +1734,21 @@ export function bundledMcpCli(env: NodeJS.ProcessEnv = process.env): McpCli {
 
 /** The approval guard the daemon loads into the engine. */
 export const APPROVAL_GUARD = fileURLToPath(new URL("./extensions/approval-guard.ts", import.meta.url));
+
+// 20261104 - itera - add ruth-context extension wiring -- Begin
+/** The extension that brings Ruth's memory into the engine. */
+export const RUTH_CONTEXT = fileURLToPath(new URL("./extensions/ruth-context.ts", import.meta.url));
+
+/** The extensions of the assistant's own engine; any other engine (no `agentHome`) loads none. */
+export function engineExtensionArgs(agentHome: string | undefined): string[] {
+	return agentHome ? ["-e", APPROVAL_GUARD, "-e", RUTH_CONTEXT] : [];
+}
+
+/** The memory extension and, when set, the file with its token: the model must not read or change them. */
+export function ruthProtectedPaths(env: NodeJS.ProcessEnv): string[] {
+	return [RUTH_CONTEXT, ...(env.RUTH_CONTEXT_FILE ? [env.RUTH_CONTEXT_FILE] : [])];
+}
+// 20261104 - itera - add ruth-context extension wiring -- End
 
 /** Why a connector action did not start; `message` is safe to show. */
 export type ConnectorRefusal = {
