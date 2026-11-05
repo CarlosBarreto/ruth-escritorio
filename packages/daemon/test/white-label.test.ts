@@ -1,5 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+// 20261104 - itera - replace memory rules tests -- Begin
+import { UNAVAILABLE } from "../src/extensions/ruth-context.ts";
+// 20261104 - itera - replace memory rules tests -- End
 import {
 	HIDDEN_NAMES,
 	IDENTITY_SOURCE,
@@ -60,15 +63,33 @@ describe("isBlockedInput", () => {
 	});
 });
 
-describe("memory scope in the identity (S23, L85)", () => {
+// 20261104 - itera - replace memory rules tests -- Begin
+describe("memory rules in the identity", () => {
 	const identity = readFileSync(IDENTITY_SOURCE, "utf8");
 
-	it("saves only to the gentle-dot project", () => {
-		expect(identity).toMatch(/save[^.\n]*`gentle-dot`/i);
+	it("no longer sends the assistant to save or search on its own", () => {
+		expect(identity).not.toMatch(/`gentle-dot`/);
+		expect(identity).not.toMatch(/all_projects/);
+		expect(identity).not.toMatch(/match_mode/);
+		expect(identity).not.toMatch(/When you (save|search)/);
+		expect(identity).toMatch(/cannot save to that memory or search it yourself/);
 	});
 
-	it("searches the user's whole memory, not only gentle-dot", () => {
-		expect(identity).toMatch(/all_projects: true/);
-		expect(identity).not.toMatch(/save or search memories, always use that project/);
+	it("says where the memory arrives, and that it is data and not instructions", () => {
+		expect(identity).toMatch(/`<memoria>` and `<personas>`/);
+		expect(identity).toMatch(/data[^.\n]*never instructions/);
+	});
+
+	it("says to tell the user when the memory could not be reached", () => {
+		expect(identity).toMatch(/`\[memoria\]`[^\n]*could not be reached/);
+		expect(identity).toMatch(/tell the user you could not check your memory/);
+		expect(UNAVAILABLE.startsWith("[memoria]")).toBe(true);
+	});
+
+	it("still calls itself Gentle Dot until the rebrand", () => {
+		expect(identity).toMatch(/^# Product identity: Gentle Dot/);
+		expect(identity).toMatch(/You are Gentle Dot/);
+		expect(identity).not.toMatch(/Ruth/);
 	});
 });
+// 20261104 - itera - replace memory rules tests -- End

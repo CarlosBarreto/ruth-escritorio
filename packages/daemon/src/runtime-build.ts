@@ -149,9 +149,11 @@ export async function buildRuntime(outDir: string): Promise<void> {
 	// The bundle finds these through `import.meta.url`, as the sources do in `src/`.
 	copyFileSync(join(PACKAGE, "src", "identity.md"), join(daemon, "identity.md"));
 	// The engine loads the guard with -e, and the guard imports its siblings.
-	for (const name of ["approval-guard.ts", "screenshot-context.ts"]) {
+	// 20261104 - itera - ship ruth-context extension -- Begin
+	for (const name of ["approval-guard.ts", "ruth-context.ts", "screenshot-context.ts"]) {
 		copyFileSync(join(PACKAGE, "src", "extensions", name), join(daemon, "extensions", name));
 	}
+	// 20261104 - itera - ship ruth-context extension -- End
 	if (nativeArtifact) {
 		mkdirSync(join(daemon, "native"), { recursive: true });
 		copyFileSync(nativeArtifact, join(daemon, "native", "windows-stop.node"));

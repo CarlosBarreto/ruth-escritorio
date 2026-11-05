@@ -11,6 +11,9 @@ import { oauthOptions } from "./fake-oauth.ts";
 import { FAKE_AGENT, tempDir, waitFor } from "./helpers.ts";
 
 const GUARD = fileURLToPath(new URL("../src/extensions/approval-guard.ts", import.meta.url));
+// 20261104 - itera - expect ruth-context in the engine -- Begin
+const RUTH_CONTEXT = fileURLToPath(new URL("../src/extensions/ruth-context.ts", import.meta.url));
+// 20261104 - itera - expect ruth-context in the engine -- End
 
 /** The engine's mcp.json without the proxy key, which changes with every engine launch. */
 const withoutKey = (text: string) => text.replace(/Bearer [^"]+/g, "Bearer <key>");
@@ -224,9 +227,14 @@ describe("connectors over the protocol", () => {
 		const { agentArgs, agentEnv } = await setup({ home: true });
 		const args = agentArgs();
 		expect(args[args.indexOf("-e") + 1]).toBe(GUARD);
+		// 20261104 - itera - expect ruth-context in the engine -- Begin
+		expect(args[args.indexOf("-e") + 3]).toBe(RUTH_CONTEXT);
+		// 20261104 - itera - expect ruth-context in the engine -- End
 		expect(JSON.parse(agentEnv().GENTLE_DOT_CONNECTOR_POLICY ?? "{}")).toMatchObject({
 			connectors: {},
-			protectedPaths: expect.arrayContaining([GUARD]),
+			// 20261104 - itera - expect ruth-context protected -- Begin
+			protectedPaths: expect.arrayContaining([GUARD, RUTH_CONTEXT]),
+			// 20261104 - itera - expect ruth-context protected -- End
 		});
 	});
 });

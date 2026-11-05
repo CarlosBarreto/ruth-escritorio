@@ -73,6 +73,9 @@ describe.skipIf(skipBuild)("build:runtime", () => {
 				windows ? "bin/pi.cmd" : "bin/pi",
 				"daemon/cli.mjs",
 				"daemon/extensions/approval-guard.ts",
+				// 20261104 - itera - expect ruth-context in the runtime -- Begin
+				"daemon/extensions/ruth-context.ts",
+				// 20261104 - itera - expect ruth-context in the runtime -- End
 				"daemon/extensions/screenshot-context.ts",
 				"daemon/identity.md",
 				...(windows ? ["daemon/native/windows-stop.node"] : []),
@@ -85,6 +88,11 @@ describe.skipIf(skipBuild)("build:runtime", () => {
 		expect(readFileSync(join(out, "daemon", "extensions", "approval-guard.ts"), "utf8")).toBe(
 			readFileSync(join(PACKAGE, "src", "extensions", "approval-guard.ts"), "utf8"),
 		);
+		// 20261104 - itera - expect ruth-context in the runtime -- Begin
+		expect(readFileSync(join(out, "daemon", "extensions", "ruth-context.ts"), "utf8")).toBe(
+			readFileSync(join(PACKAGE, "src", "extensions", "ruth-context.ts"), "utf8"),
+		);
+		// 20261104 - itera - expect ruth-context in the runtime -- End
 	});
 
 	it("bundles the protocol and leaves the engine and ws external", () => {
