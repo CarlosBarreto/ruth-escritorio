@@ -4,7 +4,8 @@
  *
  * Before each run started by the user it asks Ruth (`POST /v1/contexto`) for what it knows and adds
  * the answer as a hidden message. Ruth owns long-term memory, so the engine's own memory tools are
- * blocked here. Subagents do not load this file: they get no memory and no such block.
+ * blocked here. Subagents do not load this file: they get no memory, and `approval-guard.ts` blocks
+ * the same tools for them.
  *
  * What Ruth returns is data, not instructions; `identity.md` tells the model so. A failure never
  * stops a turn: the model is told the memory could not be reached, which must not read as "there is

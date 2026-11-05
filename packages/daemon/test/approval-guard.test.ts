@@ -6,9 +6,20 @@ import approvalGuard, {
 	type ConnectorPolicy,
 	decide,
 	isReadOnlyCall,
+	// 20261104 - itera - test memory block in subagents -- Begin
+	MEMORY_TOOL,
+	MEMORY_TOOL_BLOCKED,
+	// 20261104 - itera - test memory block in subagents -- End
 	POLICY_ENV,
 	parsePolicy,
 } from "../src/extensions/approval-guard.ts";
+// 20261104 - itera - test memory block in subagents -- Begin
+import {
+	MEMORY_TOOL as RUTH_MEMORY_TOOL,
+	MEMORY_TOOL_BLOCKED as RUTH_MEMORY_TOOL_BLOCKED,
+} from "../src/extensions/ruth-context.ts";
+
+// 20261104 - itera - test memory block in subagents -- End
 
 const AGENT = "/data/agent";
 const PROTECTED = [`${AGENT}/mcp.json`, `${AGENT}/mcp-auth.json`, "/data/connectors.json", "/app/guard.ts"];
@@ -426,6 +437,134 @@ describe("approval guard extension", () => {
 		expect(result).toEqual({ block: true, reason: expect.stringContaining("Connectors screen") });
 	});
 });
+
+// 20261104 - itera - test memory block in subagents -- Begin
+describe("long-term memory tools in subagents", () => {
+	const MEMORY_BLOCK = { block: true, reason: MEMORY_TOOL_BLOCKED };
+	const event = (toolName: string, input: Record<string, unknown> = {}) => ({
+		type: "tool_call",
+		toolName,
+		toolCallId: "m",
+		input,
+	});
+	/** Every rule below the block that could let a `mcp__` memory tool through. */
+	const lenient: ConnectorPolicy = {
+		connectors: { notion: { name: "Notion", mode: "read_write", readOnlyTools: ["mem_search"] } },
+		protectedPaths: PROTECTED,
+		builtin: ["computer"],
+		proxied: ["linear"],
+	};
+
+	function load(
+		options: { subagent?: boolean } | undefined,
+		raw: string | undefined = JSON.stringify(lenient),
+	) {
+		const lookups: string[] = [];
+		const { pi, handlers } = fakePi([
+			{ name: "mcp__notion__mem_search", annotations: { readOnlyHint: true } },
+		]);
+		const getAllTools = pi.getAllTools;
+		pi.getAllTools = () => {
+			lookups.push("getAllTools");
+			return getAllTools();
+		};
+		const saved = process.env[POLICY_ENV];
+		if (raw === undefined) delete process.env[POLICY_ENV];
+		else process.env[POLICY_ENV] = raw;
+		try {
+			approvalGuard(pi as never, options);
+		} finally {
+			if (saved === undefined) delete process.env[POLICY_ENV];
+			else process.env[POLICY_ENV] = saved;
+		}
+		return { handler: handlers[0] as Handler, lookups };
+	}
+
+	it("keeps the rule identical to ruth-context.ts", () => {
+		expect(MEMORY_TOOL.source).toBe(RUTH_MEMORY_TOOL.source);
+		expect(MEMORY_TOOL.flags).toBe(RUTH_MEMORY_TOOL.flags);
+		expect(MEMORY_TOOL_BLOCKED).toBe(RUTH_MEMORY_TOOL_BLOCKED);
+	});
+
+	it.each([
+		"mem_save",
+		"mem_search",
+		"mem_session_summary",
+		"mem_delete",
+		"mem_capture_passive",
+		"engram.mem_save",
+		"x.mem_save",
+		"mcp__engram__mem_save",
+	])("blocks %s with Ruth's reason", async (name) => {
+		const { ctx, asked } = fakeCtx(true);
+		expect(await load({ subagent: true }).handler(event(name), ctx)).toEqual(MEMORY_BLOCK);
+		expect(asked).toEqual([]);
+	});
+
+	it.each([
+		["a built-in server", "mcp__computer__mem_save"],
+		["a proxied connector", "mcp__linear__mem_save"],
+		["a curated read-only tool", "mcp__notion__mem_search"],
+		["a connector that would ask", "mcp__notion__mem_save"],
+	])("decides before the rule for %s", async (_rule, name) => {
+		const { ctx, asked } = fakeCtx(true);
+		const { handler, lookups } = load({ subagent: true });
+		expect(await handler(event(name), ctx)).toEqual(MEMORY_BLOCK);
+		expect(asked).toEqual([]);
+		expect(lookups).toEqual([]);
+	});
+
+	it.each([
+		["missing", undefined],
+		["invalid", "not json"],
+	])("blocks them with a %s policy", async (_state, raw) => {
+		const { ctx } = fakeCtx(true);
+		const { handler } = load({ subagent: true }, raw);
+		expect(await handler(event("mem_save"), ctx)).toEqual(MEMORY_BLOCK);
+		expect(await handler(event("mcp__engram__mem_save"), ctx)).toEqual(MEMORY_BLOCK);
+	});
+
+	it("blocks a nested call too", async () => {
+		const { ctx } = fakeCtx(true);
+		const nested = { ...event("mem_save"), toolCallId: "p/1", parentToolCallId: "p" };
+		expect(await load({ subagent: true }).handler(nested, ctx)).toEqual(MEMORY_BLOCK);
+	});
+
+	it("leaves names that only look alike to the other rules", async () => {
+		const { handler } = load({ subagent: true });
+		const { ctx } = fakeCtx(true);
+		for (const name of ["memory_save", "remem_save", "add_mem_save", "read"])
+			expect(await handler(event(name, { path: "/data/workspace/a.txt" }), ctx)).toBeUndefined();
+		const inside = await handler(event("mcp__x__add_mem_save"), ctx);
+		expect(inside).toEqual({ block: true, reason: expect.stringContaining("not approved") });
+	});
+
+	it("still applies the other rules in a subagent", async () => {
+		const { handler } = load({ subagent: true });
+		const { ctx } = fakeCtx(true);
+		expect(await handler(event("write", { path: `${AGENT}/mcp.json` }), ctx)).toEqual({
+			block: true,
+			reason: expect.stringContaining("Connectors screen"),
+		});
+	});
+
+	it.each([
+		["no options", undefined],
+		["an empty options object", {}],
+		["subagent: false", { subagent: false }],
+	])("changes nothing in the main engine with %s", async (_label, options) => {
+		const { handler } = load(options);
+		const { ctx, asked } = fakeCtx(true);
+		for (const name of ["mem_save", "engram.mem_save", "x.mem_save"])
+			expect(await handler(event(name), ctx)).toBeUndefined();
+		expect(await handler(event("mcp__computer__mem_save"), ctx)).toBeUndefined();
+		expect(await handler(event("mcp__linear__mem_save"), ctx)).toBeUndefined();
+		expect(asked).toEqual([]);
+		expect(await handler(event("mcp__notion__mem_save"), ctx)).toBeUndefined();
+		expect(asked).toEqual([{ title: "Allow Notion to mem save?", message: expect.any(String) }]);
+	});
+});
+// 20261104 - itera - test memory block in subagents -- End
 
 describe("screenshots in the model's context (S24.10)", () => {
 	it("hooks the context event so each model call carries only the last screenshot", async () => {
